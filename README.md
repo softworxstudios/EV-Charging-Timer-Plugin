@@ -21,7 +21,7 @@ Create these two helpers **before** importing the blueprint.
 ## 📥 Import the Blueprint
 
 1. Open **Settings → Automations & Scenes → Blueprints**  
-2. Click **Import Blueprint**  
+2. Click "Preview" then **Import Blueprint**  
 3. Paste the raw-file URL of the blueprint:  
 
 https://github.com/softworxstudios/EV-Charging-Timer-Plugin/raw/main/EV_Charging_Timer_BluePrint.yaml
