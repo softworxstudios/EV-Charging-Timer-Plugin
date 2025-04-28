@@ -8,15 +8,15 @@ Step 1: Create Required Helpers
 Before importing the blueprint, create these helpers in Home Assistant. This step is critical for it to function.
     
 1. Timer Helper: 
-         Go to Settings > Devices & Services > Helpers > Create Helper 
-         Select "Timer" 
-         Name it (e.g., "EV Charging Timer") 
+         Go to Settings > Devices & Services > Helpers > Create Helper. 
+         Select "Timer". 
+         Name it (e.g., "EV Charging Timer"). 
          Set a default duration (e.g., 6:30:00) This defines the "max" time, or the 100% value. You can change this value under timers at any point.
     
 2. Number Helper: 
          Go to Settings > Devices & Services > Helpers > Create Helper 
-         Select "Number" 
-         Name it (e.g., "EV Charge Percentage") 
+         Select "Number". 
+         Name it (e.g., "EV Charge Percentage"). 
          Min: 10, Max: 100, Step: 5 
          Unit of measurement: % 
 
