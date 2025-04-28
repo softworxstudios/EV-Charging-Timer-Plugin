@@ -1,0 +1,148 @@
+blueprint:
+  name: EV Charging Timer (Percentage-Based)
+  description: >
+    A smart charging timer for electric vehicles (bikes, scooters, etc.) that automatically turns off
+    your charger after a calculated time based on the charging percentage you set. Perfect for extending
+    battery life and preventing overcharging.
+  domain: automation
+  source_url: https://github.com/your-username/home-assistant-blueprints/blob/main/ev_charging_timer.yaml
+  version: '1.0'
+  author: Your Name
+  
+  # These are the inputs that users will configure when setting up this blueprint
+  input:
+    smart_plug:
+      name: Charger Smart Plug
+      description: Select the smart plug that controls your charger
+      selector:
+        entity:
+          domain: switch
+    
+    timer_entity:
+      name: Timer Entity
+      description: Select a timer entity to use for countdown (create one in Settings > Devices & Services > Helpers > Timer)
+      selector:
+        entity:
+          domain: timer
+    
+    charge_percentage:
+      name: Charge Percentage Input
+      description: Select an input_number entity for setting the charge percentage (create one in Settings > Devices & Services > Helpers > Number)
+      selector:
+        entity:
+          domain: input_number
+    
+    max_charge_hours:
+      name: Maximum Charge Time (hours)
+      description: The time needed for a 100% charge (6.5 hours = 390 minutes by default)
+      default: 6.5
+      selector:
+        number:
+          min: 1
+          max: 24
+          step: 0.1
+          unit_of_measurement: hours
+
+# Triggers - when this automation should run
+trigger:
+  # When the smart plug turns ON - start timing
+  - entity_id: !input smart_plug
+    to: "on"
+    trigger: state
+    id: plug_on
+  
+  # When the smart plug turns OFF - cancel timer
+  - entity_id: !input smart_plug
+    to: "off"
+    trigger: state
+    id: plug_off
+  
+  # When the timer finishes - turn off the plug
+  - event_type: timer.finished
+    event_data:
+      entity_id: !input timer_entity
+    trigger: event
+    id: timer_finished
+  
+  # When the charge percentage changes - recalculate timing
+  - entity_id: !input charge_percentage
+    trigger: state
+    id: percentage_changed
+
+# Define what happens for each trigger
+action:
+  - choose:
+      # CASE 1: Smart plug turned ON - start the timer
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'plug_on' }}"
+        sequence:
+          # Cancel any existing timer first
+          - service: timer.cancel
+            target:
+              entity_id: !input timer_entity
+          
+          # Brief delay to ensure timer is properly canceled
+          - delay: 
+              seconds: 1
+          
+          # Start a new timer with duration based on percentage
+          - service: timer.start
+            target:
+              entity_id: !input timer_entity
+            data:
+              duration: >
+                {% set percentage = states(input.charge_percentage) | float %}
+                {% set max_seconds = input.max_charge_hours | float * 3600 %}
+                {% set total_seconds = (percentage / 100 * max_seconds) | int %}
+                {% set hours = (total_seconds // 3600) %}
+                {% set minutes = ((total_seconds % 3600) // 60) %}
+                {% set seconds = total_seconds % 60 %}
+                {{ '%02d:%02d:%02d' | format(hours, minutes, seconds) }}
+      
+      # CASE 2: Smart plug turned OFF - cancel the timer
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'plug_off' }}"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input timer_entity
+      
+      # CASE 3: Timer finished - turn off the smart plug
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'timer_finished' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input smart_plug
+      
+      # CASE 4: Percentage changed while plug is ON - restart timer with new duration
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'percentage_changed' }}"
+          - condition: state
+            entity_id: !input smart_plug
+            state: "on"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input timer_entity
+          - delay:
+              seconds: 1
+          - service: timer.start
+            target:
+              entity_id: !input timer_entity
+            data:
+              duration: >
+                {% set percentage = states(input.charge_percentage) | float %}
+                {% set max_seconds = input.max_charge_hours | float * 3600 %}
+                {% set total_seconds = (percentage / 100 * max_seconds) | int %}
+                {% set hours = (total_seconds // 3600) %}
+                {% set minutes = ((total_seconds % 3600) // 60) %}
+                {% set seconds = total_seconds % 60 %}
+                {{ '%02d:%02d:%02d' | format(hours, minutes, seconds) }}
+
+# Use single mode to prevent unintended restart loops
+mode: single
