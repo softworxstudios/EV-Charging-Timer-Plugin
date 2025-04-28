@@ -4,7 +4,7 @@ blueprint:
     Starts a countdown when the charger smart-plug is turned on and switches it
     off after the time that corresponds to the requested charge percentage.
   domain: automation
-  author: SoftWorx Studios (2025) Version 1.0.0
+  author: SoftWorx Studios (2025) Version 1.0.0 Release
 
 # ───────────────────────── INPUTS ─────────────────────────
   input:
