@@ -1,33 +1,30 @@
 blueprint:
   name: EV Charging Timer (Percentage-Based)
-  description: >-
-    Starts a countdown as soon as the charger smart-plug turns on and
-    switches it off after the calculated time
-    ( percentage × max-charge-hours ).
+  description: >
+    Starts a countdown when the charger smart-plug is turned on and switches it
+    off after the time that corresponds to the requested charge percentage.
   domain: automation
   author: SoftWorx Studios (2025) Version 1.0.0
 
+# ───────────────────────── INPUTS ─────────────────────────
   input:
     smart_plug:
       name: Charger Smart Plug
       selector:
-        entity:
-          domain: switch
+        entity: { domain: switch }
 
     timer_entity:
       name: Timer Entity
       selector:
-        entity:
-          domain: timer
+        entity: { domain: timer }
 
     charge_percentage:
-      name: Charge Percentage Input
+      name: Charge-Percentage Helper
       selector:
-        entity:
-          domain: input_number
+        entity: { domain: input_number }
 
     max_charge_hours:
-      name: Maximum Charge Time (hours)
+      name: Maximum Charge Time (h)
       default: 6.5
       selector:
         number:
@@ -36,7 +33,13 @@ blueprint:
           step: 0.1
           unit_of_measurement: h
 
-# ──────────────────────────── TRIGGERS ────────────────────────────
+# ──────────────────────── VARIABLES ───────────────────────
+# (Expose the inputs to Jinja)
+variables:
+  _pct_ent: !input charge_percentage        # entity-id string
+  _max_hrs: !input max_charge_hours         # numeric value
+
+# ───────────────────────── TRIGGERS ───────────────────────
 trigger:
   - platform: state
     entity_id: !input smart_plug
@@ -50,63 +53,51 @@ trigger:
 
   - platform: event
     event_type: timer.finished
-    event_data:
-      entity_id: !input timer_entity
+    event_data: { entity_id: !input timer_entity }
     id: timer_finished
 
   - platform: state
     entity_id: !input charge_percentage
     id: percentage_changed
 
-  # (optional) update every 30 s; remove if not needed
+# optional 30-second tick  (delete if not wanted)
   - platform: time_pattern
     seconds: "/30"
-    id: time_update
+    id: tick
 
-# ──────────────────────────── ACTIONS ─────────────────────────────
+# ───────────────────────── ACTIONS ────────────────────────
 action:
   - choose:
 
-      # ── 1 | Plug turned ON → start timer ──
-      - conditions:
-          - condition: trigger
-            id: plug_on
+      # ── 1 | Plug turned ON → start timer
+      - conditions: { condition: trigger, id: plug_on }
         sequence:
           - service: timer.cancel
-            target:
-              entity_id: !input timer_entity
+            target: { entity_id: !input timer_entity }
 
-          - delay:
-              seconds: 1
+          - delay: { seconds: 1 }
 
           - service: timer.start
-            target:
-              entity_id: !input timer_entity
+            target: { entity_id: !input timer_entity }
             data:
               duration: >-
-                {% set pct      = states(!input charge_percentage) | float %}
-                {% set max_hrs  = !input max_charge_hours | float %}
-                {{ ((pct / 100) * max_hrs * 3600) | int }}
+                {% set pct  = states(_pct_ent) | float %}
+                {% set hrs  = _max_hrs | float %}
+                {{ ((pct / 100) * hrs * 3600) | int }}
 
-      # ── 2 | Plug turned OFF → cancel timer ──
-      - conditions:
-          - condition: trigger
-            id: plug_off
+      # ── 2 | Plug turned OFF → cancel timer
+      - conditions: { condition: trigger, id: plug_off }
         sequence:
           - service: timer.cancel
-            target:
-              entity_id: !input timer_entity
+            target: { entity_id: !input timer_entity }
 
-      # ── 3 | Timer finished → turn plug OFF ──
-      - conditions:
-          - condition: trigger
-            id: timer_finished
+      # ── 3 | Timer finished → turn plug OFF
+      - conditions: { condition: trigger, id: timer_finished }
         sequence:
           - service: switch.turn_off
-            target:
-              entity_id: !input smart_plug
+            target: { entity_id: !input smart_plug }
 
-      # ── 4 | Percentage changed while charging ──
+      # ── 4 | Percentage changed while charging → restart timer
       - conditions:
           - condition: trigger
             id: percentage_changed
@@ -115,29 +106,23 @@ action:
             state: "on"
         sequence:
           - service: timer.cancel
-            target:
-              entity_id: !input timer_entity
+            target: { entity_id: !input timer_entity }
 
-          - delay:
-              seconds: 1
+          - delay: { seconds: 1 }
 
           - service: timer.start
-            target:
-              entity_id: !input timer_entity
+            target: { entity_id: !input timer_entity }
             data:
               duration: >-
-                {% set pct      = states(!input charge_percentage) | float %}
-                {% set max_hrs  = !input max_charge_hours | float %}
-                {{ ((pct / 100) * max_hrs * 3600) | int }}
+                {% set pct  = states(_pct_ent) | float %}
+                {% set hrs  = _max_hrs | float %}
+                {{ ((pct / 100) * hrs * 3600) | int }}
 
-      # ── 5 | (optional) 30-second updates ──
-      - conditions:
-          - condition: trigger
-            id: time_update
+      # ── 5 | (Optional) 30-s tick – disabled placeholder
+      - conditions: { condition: trigger, id: tick }
         sequence:
           - service: persistent_notification.dismiss
-            data:
-              notification_id: timer_update_dummy
-            enabled: false        # turn to true if you add real UI feedback
+            data: { notification_id: ev_charge_timer_tick }
+            enabled: false
 
 mode: single
