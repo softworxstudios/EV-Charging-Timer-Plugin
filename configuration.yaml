@@ -1,0 +1,25 @@
+template:
+  - sensor:
+      - name: "EV Charging Remaining Time"
+        unique_id: ev_charging_remaining_time
+        state: >
+          {% set timestamp = (as_timestamp(now()) // 30) %}
+          {% if states('YOUR_SMART_PLUG') == 'off' %}
+            00:00:00
+          {% else %}
+            {% set end_time = state_attr('YOUR_TIMER', 'finishes_at') %}
+            {% if end_time is not none %}
+              {% set remaining = (as_timestamp(end_time) - as_timestamp(now())) | int %}
+              {% if remaining > 0 %}
+                {% set hours = (remaining // 3600) %}
+                {% set minutes = ((remaining % 3600) // 60) %}
+                {% set seconds = remaining % 60 %}
+                {{ '%02d:%02d:%02d' | format(hours, minutes, seconds) }}
+              {% else %}
+                00:00:00
+              {% endif %}
+            {% else %}
+              00:00:00
+            {% endif %}
+          {% endif %}
+        icon: mdi:timer

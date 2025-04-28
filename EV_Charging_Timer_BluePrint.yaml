@@ -79,14 +79,7 @@ action:
             target:
               entity_id: !input timer_entity
             data:
-              duration: >
-                {% set percentage = states(!input charge_percentage) | float %}
-                {% set max_seconds = (!input max_charge_hours | float) * 3600 %}
-                {% set total_seconds = (percentage / 100 * max_seconds) | int %}
-                {% set hours = (total_seconds // 3600) %}
-                {% set minutes = ((total_seconds % 3600) // 60) %}
-                {% set seconds = total_seconds % 60 %}
-                {{ '%02d:%02d:%02d' | format(hours, minutes, seconds) }}
+              duration: "{{ (states(!input charge_percentage) | float / 100 * (!input max_charge_hours | float) * 3600) | int | timestamp_custom('%H:%M:%S', 0) }}"
       
       - conditions:
           - condition: template
@@ -120,13 +113,6 @@ action:
             target:
               entity_id: !input timer_entity
             data:
-              duration: >
-                {% set percentage = states(!input charge_percentage) | float %}
-                {% set max_seconds = (!input max_charge_hours | float) * 3600 %}
-                {% set total_seconds = (percentage / 100 * max_seconds) | int %}
-                {% set hours = (total_seconds // 3600) %}
-                {% set minutes = ((total_seconds % 3600) // 60) %}
-                {% set seconds = total_seconds % 60 %}
-                {{ '%02d:%02d:%02d' | format(hours, minutes, seconds) }}
+              duration: "{{ (states(!input charge_percentage) | float / 100 * (!input max_charge_hours | float) * 3600) | int | timestamp_custom('%H:%M:%S', 0) }}"
 
 mode: single
