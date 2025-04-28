@@ -1,11 +1,11 @@
 blueprint:
   name: EV Charging Timer (Percentage-Based)
   description: >-
-    Turns the charger off after a calculated time based on the requested
-    charge percentage. Ideal for bikes, scooters and other EVs to avoid
-    over-charging and prolong battery life.
+    Starts a countdown as soon as the charger smart-plug turns on and
+    switches it off after the calculated time
+    ( percentage × max-charge-hours ).
   domain: automation
-  author: SoftWorx Studios (2025)
+  author: SoftWorx Studios (2025) Version 1.0.0
 
   input:
     smart_plug:
@@ -28,7 +28,6 @@ blueprint:
 
     max_charge_hours:
       name: Maximum Charge Time (hours)
-      description: Time required for a full (100 %) charge
       default: 6.5
       selector:
         number:
@@ -59,11 +58,16 @@ trigger:
     entity_id: !input charge_percentage
     id: percentage_changed
 
+  # (optional) update every 30 s; remove if not needed
+  - platform: time_pattern
+    seconds: "/30"
+    id: time_update
+
 # ──────────────────────────── ACTIONS ─────────────────────────────
 action:
   - choose:
 
-      # ── 1. Plug turned ON ──
+      # ── 1 | Plug turned ON → start timer ──
       - conditions:
           - condition: trigger
             id: plug_on
@@ -80,12 +84,11 @@ action:
               entity_id: !input timer_entity
             data:
               duration: >-
-                {# seconds = (percentage / 100) * max_hours * 3600 #}
-                {% set pct      = states('!input charge_percentage') | float %}
-                {% set max_hrs  = '!input max_charge_hours' | float %}
+                {% set pct      = states(!input charge_percentage) | float %}
+                {% set max_hrs  = !input max_charge_hours | float %}
                 {{ ((pct / 100) * max_hrs * 3600) | int }}
 
-      # ── 2. Plug turned OFF ──
+      # ── 2 | Plug turned OFF → cancel timer ──
       - conditions:
           - condition: trigger
             id: plug_off
@@ -94,7 +97,7 @@ action:
             target:
               entity_id: !input timer_entity
 
-      # ── 3. Timer finished ──
+      # ── 3 | Timer finished → turn plug OFF ──
       - conditions:
           - condition: trigger
             id: timer_finished
@@ -103,7 +106,7 @@ action:
             target:
               entity_id: !input smart_plug
 
-      # ── 4. Percentage changed while plug ON ──
+      # ── 4 | Percentage changed while charging ──
       - conditions:
           - condition: trigger
             id: percentage_changed
@@ -123,8 +126,18 @@ action:
               entity_id: !input timer_entity
             data:
               duration: >-
-                {% set pct      = states('!input charge_percentage') | float %}
-                {% set max_hrs  = '!input max_charge_hours' | float %}
+                {% set pct      = states(!input charge_percentage) | float %}
+                {% set max_hrs  = !input max_charge_hours | float %}
                 {{ ((pct / 100) * max_hrs * 3600) | int }}
+
+      # ── 5 | (optional) 30-second updates ──
+      - conditions:
+          - condition: trigger
+            id: time_update
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: timer_update_dummy
+            enabled: false        # turn to true if you add real UI feedback
 
 mode: single
