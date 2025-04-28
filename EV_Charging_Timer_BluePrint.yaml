@@ -1,83 +1,109 @@
 blueprint:
   name: EV Charging Timer (Percentage-Based)
-  description: A smart charging timer for electric vehicles that turns off charger after calculated time based on charging percentage.
+  description: >-
+    Turns the charger off after a calculated time based on the requested
+    charge percentage. Ideal for bikes, scooters and other EVs to avoid
+    over-charging and prolong battery life.
   domain: automation
-  source_url: https://github.com/softworxstudios/EV-Charging-Timer-Plugin/blob/main/EV_Charging_Timer_BluePrint.yaml
   author: SoftWorx Studios (2025)
+
   input:
     smart_plug:
       name: Charger Smart Plug
-      description: Select the smart plug that controls your charger
       selector:
         entity:
           domain: switch
+
     timer_entity:
       name: Timer Entity
-      description: Select a timer entity for countdown
       selector:
         entity:
           domain: timer
+
     charge_percentage:
       name: Charge Percentage Input
-      description: Select an input_number for setting charge percentage
       selector:
         entity:
           domain: input_number
+
     max_charge_hours:
       name: Maximum Charge Time (hours)
-      description: Time needed for a 100% charge
+      description: Time required for a full (100 %) charge
       default: 6.5
       selector:
         number:
           min: 0.1
           max: 24
           step: 0.1
-          unit_of_measurement: hours
+          unit_of_measurement: h
 
+# ──────────────────────────── TRIGGERS ────────────────────────────
 trigger:
   - platform: state
     entity_id: !input smart_plug
     to: "on"
     id: plug_on
+
   - platform: state
     entity_id: !input smart_plug
     to: "off"
     id: plug_off
+
   - platform: event
     event_type: timer.finished
     event_data:
       entity_id: !input timer_entity
     id: timer_finished
+
   - platform: state
     entity_id: !input charge_percentage
     id: percentage_changed
 
+# ──────────────────────────── ACTIONS ─────────────────────────────
 action:
   - choose:
+
+      # ── 1. Plug turned ON ──
       - conditions:
           - condition: trigger
             id: plug_on
         sequence:
           - service: timer.cancel
-            entity_id: !input timer_entity
+            target:
+              entity_id: !input timer_entity
+
           - delay:
               seconds: 1
+
           - service: timer.start
-            entity_id: !input timer_entity
+            target:
+              entity_id: !input timer_entity
             data:
-              duration: '{{ ((states(''input_charge_percentage'') | float / 100) * (states(''input.max_charge_hours'') | float * 3600)) | round(0) | timestamp_custom(''%H:%M:%S'', 0) }}'
+              duration: >-
+                {# seconds = (percentage / 100) * max_hours * 3600 #}
+                {% set pct      = states('!input charge_percentage') | float %}
+                {% set max_hrs  = '!input max_charge_hours' | float %}
+                {{ ((pct / 100) * max_hrs * 3600) | int }}
+
+      # ── 2. Plug turned OFF ──
       - conditions:
           - condition: trigger
             id: plug_off
         sequence:
           - service: timer.cancel
-            entity_id: !input timer_entity
+            target:
+              entity_id: !input timer_entity
+
+      # ── 3. Timer finished ──
       - conditions:
           - condition: trigger
             id: timer_finished
         sequence:
           - service: switch.turn_off
-            entity_id: !input smart_plug
+            target:
+              entity_id: !input smart_plug
+
+      # ── 4. Percentage changed while plug ON ──
       - conditions:
           - condition: trigger
             id: percentage_changed
@@ -86,11 +112,19 @@ action:
             state: "on"
         sequence:
           - service: timer.cancel
-            entity_id: !input timer_entity
+            target:
+              entity_id: !input timer_entity
+
           - delay:
               seconds: 1
+
           - service: timer.start
-            entity_id: !input timer_entity
+            target:
+              entity_id: !input timer_entity
             data:
-              duration: '{{ ((states(''input_charge_percentage'') | float / 100) * (states(''input.max_charge_hours'') | float * 3600)) | round(0) | timestamp_custom(''%H:%M:%S'', 0) }}'
+              duration: >-
+                {% set pct      = states('!input charge_percentage') | float %}
+                {% set max_hrs  = '!input max_charge_hours' | float %}
+                {{ ((pct / 100) * max_hrs * 3600) | int }}
+
 mode: single
