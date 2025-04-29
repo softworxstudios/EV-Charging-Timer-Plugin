@@ -1,7 +1,6 @@
 blueprint:
   name: EV Charger Automation
-  description: >
-    "Manage EV charging with timer control and UI-only progress updates."
+  description: "Manage EV charging with timer control and UI-only progress updates."
   domain: automation
   input:
     charger_switch:
