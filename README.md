@@ -1,7 +1,12 @@
 # EV Charging Timer Plugin v1.1.0  
 **SoftWorx Studios**
 
-Automate timed shut-off of any charger (or other device) in Home Assistant based on a user-selectable charge-percentage, with real-time progress tracking.
+Automate timed shut-off of any charger (or other device) in Home Assistant based on a user-selectable charge-percentage, with real-time progress tracking. Download the plugin by copying this link into the HA "Import Blueprint" section, then click preview, and download.
+
+Open Settings → Automations & Scenes → Blueprints
+Click Import Blueprint
+Paste the raw-file URL of the blueprint:
+https://github.com/softworxstudios/EV-Charging-Timer-Plugin/raw/main/EV_Charging_Timer_BluePrint.yaml
 
 ---
 
