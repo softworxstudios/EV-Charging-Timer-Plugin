@@ -1,5 +1,5 @@
-# Update the blueprint to dynamically use the timer's duration attribute
-updated_blueprint_dynamic_timer = """
+# Update the blueprint to remove all hard-coded time values and use the timer's dynamic duration
+updated_blueprint_dynamic_duration = """
 blueprint:
   name: EV Charger Automation
   description: >
@@ -138,7 +138,7 @@ mode: restart
 """
 
 # Save the updated blueprint to a new file
-with open("ev_charger_blueprint_dynamic_timer.yaml", "w") as file:
-    file.write(updated_blueprint_dynamic_timer)
+with open("ev_charger_blueprint_dynamic_duration.yaml", "w") as file:
+    file.write(updated_blueprint_dynamic_duration)
 
-"Updated blueprint with dynamic timer logic saved successfully."
+"Updated blueprint with dynamic duration logic saved successfully."
