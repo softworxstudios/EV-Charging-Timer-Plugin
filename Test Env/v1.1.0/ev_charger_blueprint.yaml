@@ -24,7 +24,7 @@ blueprint:
           domain: input_number
     max_duration:
       name: Maximum Timer Duration
-      description: Maximum duration for the timer (default: 8 hours 30 minutes).
+      description: "Maximum duration for the timer (default: 8 hours 30 minutes)".
       default: 08:30:00
       selector:
         text:
