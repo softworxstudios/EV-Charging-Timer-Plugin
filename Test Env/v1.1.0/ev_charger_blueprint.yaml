@@ -1,9 +1,10 @@
-# Update the blueprint to remove all hard-coded time values and use the timer's dynamic duration
-updated_blueprint_dynamic_duration = """
+# Create updated blueprint with a number selector for charge percentage
+updated_blueprint = '''
 blueprint:
-  name: EV Charger Automation
+  name: EV Charger Automation with Dynamic Charge Percentage
   description: >
-    Manage EV charging with timer control and UI-only progress updates, dynamically using the timer's duration.
+    Manage EV charging with timer control and UI-only progress updates, allowing users to adjust the max
+    charge time (hours) and target charge percentage directly in the automation UI.
   domain: automation
   input:
     charger_switch:
@@ -20,23 +21,36 @@ blueprint:
         entity:
           domain: timer
 
-    charge_percentage:
-      name: Charge Percentage
-      description: "Input-number helper for desired charge percentage (0–100)."
+    max_charge_time:
+      name: Max Charge Time (h)
+      description: "Maximum time (in hours) for a 100% charge."
+      default: 8.5
       selector:
-        entity:
-          domain: input_number
+        number:
+          min: 1
+          max: 24
+          step: 0.5
+
+    charge_percentage:
+      name: Charge Percentage (%)
+      description: "Target charge percentage (1–100%)."
+      default: 80
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
 
     progress_sensor:
       name: Charge Progress Sensor
-      description: "Template sensor showing % charged (must exist in HA)."
+      description: "Template sensor showing % charged (must exist)."
       selector:
         entity:
           domain: sensor
 
     time_remaining_sensor:
       name: Time Remaining Sensor
-      description: "Template sensor showing time remaining (must exist in HA)."
+      description: "Template sensor showing time remaining (must exist)."
       selector:
         entity:
           domain: sensor
@@ -50,20 +64,17 @@ trigger:
     event_type: timer.finished
     event_data:
       entity_id: !input charge_timer
-  - platform: state
-    entity_id: !input charge_percentage
 
 condition: []
 
 action:
   - choose:
 
-      # 1) Charger turned ON → (re)start timer based on %
+      # 1) Charger turned ON → start timer based on %
       - conditions:
           - condition: template
             value_template: >
-              {{ trigger.platform == 'state'
-                 and trigger.to_state.state == 'on' }}
+              {{ trigger.platform == 'state' and trigger.to_state.state == 'on' }}
         sequence:
           - service: timer.cancel
             target:
@@ -74,8 +85,9 @@ action:
               entity_id: !input charge_timer
             data:
               duration: >
-                {% set pct = states(!input charge_percentage) | float(0) %}
-                {% set total = (pct / 100 * state_attr(!input charge_timer, 'duration').total_seconds()) | int %}
+                {% set pct = !input charge_percentage | float %}
+                {% set max_sec = (!input max_charge_time | float) * 3600 %}
+                {% set total = (pct / 100 * max_sec) | int %}
                 {% set h = total // 3600 %}
                 {% set m = (total % 3600) // 60 %}
                 {% set s = total % 60 %}
@@ -83,10 +95,10 @@ action:
 
       # 2) Timer finished → turn off charger
       - conditions:
-          - condition: template
-            value_template: >
-              {{ trigger.platform == 'event'
-                 and trigger.event.event_type == 'timer.finished' }}
+          - condition: event
+            event_type: timer.finished
+            event_data:
+              entity_id: !input charge_timer
         sequence:
           - service: switch.turn_off
             target:
@@ -96,38 +108,13 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ trigger.platform == 'state'
-                 and trigger.to_state.state == 'off' }}
+              {{ trigger.platform == 'state' and trigger.to_state.state == 'off' }}
         sequence:
           - service: timer.cancel
             target:
               entity_id: !input charge_timer
 
-      # 4) Charge % changed while charger is ON → restart timer
-      - conditions:
-          - condition: template
-            value_template: >
-              {{ trigger.platform == 'state'
-                 and trigger.entity_id == !input charge_percentage
-                 and is_state(!input charger_switch, 'on') }}
-        sequence:
-          - service: timer.cancel
-            target:
-              entity_id: !input charge_timer
-          - delay: "00:00:01"
-          - service: timer.start
-            target:
-              entity_id: !input charge_timer
-            data:
-              duration: >
-                {% set pct = states(!input charge_percentage) | float(0) %}
-                {% set total = (pct / 100 * state_attr(!input charge_timer, 'duration').total_seconds()) | int %}
-                {% set h = total // 3600 %}
-                {% set m = (total % 3600) // 60 %}
-                {% set s = total % 60 %}
-                {{ "%02d:%02d:%02d" | format(h, m, s) }}
-
-  # 5) Refresh both template sensors
+  # 4) Refresh sensors
   - service: homeassistant.update_entity
     target:
       entity_id:
@@ -135,10 +122,11 @@ action:
         - !input time_remaining_sensor
 
 mode: restart
-"""
+''' 
 
-# Save the updated blueprint to a new file
-with open("ev_charger_blueprint_dynamic_duration.yaml", "w") as file:
-    file.write(updated_blueprint_dynamic_duration)
+# Save the blueprint YAML to a file
+target_file = 'ev_charger_blueprint_with_percentage_toggle.yaml'
+with open(target_file, 'w') as f:
+    f.write(updated_blueprint)
 
-"Updated blueprint with dynamic duration logic saved successfully."
+print(f'Blueprint saved to {target_file}')
