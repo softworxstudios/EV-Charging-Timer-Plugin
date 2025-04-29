@@ -1,0 +1,130 @@
+blueprint:
+  name: EV Charging Automation Blueprint
+  description: >
+    This blueprint automates EV charging by controlling a charger switch using a percentage-based
+    timer. When the charger is turned on, it cancels any existing timer, waits briefly, and then
+    starts the timer with a duration proportional to the current charge percentage (up to a hard cap).
+    Turning the charger off cancels the timer, and when the timer finishes the charger is turned off.
+    Changing the charge percentage while the charger is on will recompute the timer duration.
+  domain: automation
+  input:
+    charger_switch:
+      name: EV Charger Switch
+      description: The switch controlling the EV charger.
+      selector:
+        entity:
+          domain: switch
+    charge_percentage:
+      name: Charge Percentage Input
+      description: >
+        Input number entity representing the desired charge percentage (0-100).
+      selector:
+        entity:
+          domain: input_number
+    charge_timer:
+      name: Charge Timer
+      description: >
+        Timer entity used to manage the charging duration. Its duration attribute is used in the
+        calculation (with a hard cap of 30600 seconds, which equals 8 hours and 30 minutes).
+      selector:
+        entity:
+          domain: timer
+
+trigger:
+  - platform: state
+    entity_id: !input charger_switch
+    to: "on"
+    id: plug_on
+  - platform: state
+    entity_id: !input charger_switch
+    to: "off"
+    for:
+      seconds: 5
+    id: plug_off
+  - platform: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input charge_timer
+    id: timer_finished
+  - platform: state
+    entity_id: !input charge_percentage
+    id: percentage_changed
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'plug_on' }}"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+          - delay:
+              seconds: 1
+          - service: timer.start
+            target:
+              entity_id: !input charge_timer
+            data:
+              duration: >
+                {% set pct = states(charge_percentage) | float(0) %}
+                {% set HARD_CAP = 30600 %}
+                {% set dur_attr = state_attr(charge_timer, "duration") %}
+                {% if dur_attr %}
+                  {% set parts = dur_attr.split(':') %}
+                  {% set base_sec = parts[0]|int * 3600 + parts[1]|int * 60 + parts[2]|int %}
+                {% else %}
+                  {% set base_sec = HARD_CAP %}
+                {% endif %}
+                {% set max_sec = base_sec if base_sec <= HARD_CAP else HARD_CAP %}
+                {% set total_sec = (pct / 100 * max_sec) | int %}
+                {% set h = total_sec // 3600 %}
+                {% set m = (total_sec % 3600) // 60 %}
+                {% set s = total_sec % 60 %}
+                {{ "%02d:%02d:%02d" | format(h, m, s) }}
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'plug_off' }}"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'timer_finished' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input charger_switch
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'percentage_changed' }}"
+          - condition: state
+            entity_id: !input charger_switch
+            state: "on"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+          - delay:
+              seconds: 1
+          - service: timer.start
+            target:
+              entity_id: !input charge_timer
+            data:
+              duration: >
+                {% set pct = states(charge_percentage) | float(0) %}
+                {% set HARD_CAP = 30600 %}
+                {% set dur_attr = state_attr(charge_timer, "duration") %}
+                {% if dur_attr %}
+                  {% set parts = dur_attr.split(':') %}
+                  {% set base_sec = parts[0]|int * 3600 + parts[1]|int * 60 + parts[2]|int %}
+                {% else %}
+                  {% set base_sec = HARD_CAP %}
+                {% endif %}
+                {% set max_sec = base_sec if base_sec <= HARD_CAP else HARD_CAP %}
+                {% set total_sec = (pct / 100 * max_sec) | int %}
+                {% set h = total_sec // 3600 %}
+                {% set m = (total_sec % 3600) // 60 %}
+                {% set s = total_sec % 60 %}
+                {{ "%02d:%02d:%02d" | format(h, m, s) }}
+mode: restart
