@@ -1,6 +1,9 @@
+# Update the blueprint to dynamically use the timer's duration attribute
+updated_blueprint_dynamic_timer = """
 blueprint:
   name: EV Charger Automation
-  description: "Manage EV charging with timer control and UI-only progress updates."
+  description: >
+    Manage EV charging with timer control and UI-only progress updates, dynamically using the timer's duration.
   domain: automation
   input:
     charger_switch:
@@ -23,14 +26,6 @@ blueprint:
       selector:
         entity:
           domain: input_number
-
-    max_duration:
-      name: Maximum Timer Duration
-      description: "Maximum duration for the timer (default: 8 hours 30 minutes)."
-      default: "08:30:00"
-      selector:
-        text:
-          multiline: false
 
     progress_sensor:
       name: Charge Progress Sensor
@@ -80,8 +75,7 @@ action:
             data:
               duration: >
                 {% set pct = states(!input charge_percentage) | float(0) %}
-                {% set max_sec = 30600 %}  # 8 h 30 m
-                {% set total = (pct / 100 * max_sec) | int %}
+                {% set total = (pct / 100 * state_attr(!input charge_timer, 'duration').total_seconds()) | int %}
                 {% set h = total // 3600 %}
                 {% set m = (total % 3600) // 60 %}
                 {% set s = total % 60 %}
@@ -127,8 +121,7 @@ action:
             data:
               duration: >
                 {% set pct = states(!input charge_percentage) | float(0) %}
-                {% set max_sec = 30600 %}
-                {% set total = (pct / 100 * max_sec) | int %}
+                {% set total = (pct / 100 * state_attr(!input charge_timer, 'duration').total_seconds()) | int %}
                 {% set h = total // 3600 %}
                 {% set m = (total % 3600) // 60 %}
                 {% set s = total % 60 %}
@@ -142,3 +135,10 @@ action:
         - !input time_remaining_sensor
 
 mode: restart
+"""
+
+# Save the updated blueprint to a new file
+with open("ev_charger_blueprint_dynamic_timer.yaml", "w") as file:
+    file.write(updated_blueprint_dynamic_timer)
+
+"Updated blueprint with dynamic timer logic saved successfully."
