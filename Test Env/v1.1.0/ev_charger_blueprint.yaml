@@ -1,34 +1,52 @@
-
 blueprint:
   name: EV Charger Automation
-  description: Manage EV charging with progress tracking and timer control, all configurable via the Home Assistant UI.
+  description: >
+    "Manage EV charging with timer control and UI-only progress updates."
   domain: automation
   input:
     charger_switch:
       name: Charger Switch
-      description: The switch entity controlling the EV charger.
+      description: "Switch entity controlling the EV charger."
       selector:
         entity:
           domain: switch
+
     charge_timer:
       name: Charge Timer
-      description: The timer entity for the EV charging process.
+      description: "Timer entity for the EV charging process."
       selector:
         entity:
           domain: timer
+
     charge_percentage:
-      name: Charge Percentage Input
-      description: Input number entity for the desired charge percentage.
+      name: Charge Percentage
+      description: "Input-number helper for desired charge percentage (0–100)."
       selector:
         entity:
           domain: input_number
+
     max_duration:
       name: Maximum Timer Duration
-      description: "Maximum duration for the timer (default: 8 hours 30 minutes)".
-      default: 08:30:00
+      description: "Maximum duration for the timer (default: 8 hours 30 minutes)."
+      default: "08:30:00"
       selector:
         text:
           multiline: false
+
+    progress_sensor:
+      name: Charge Progress Sensor
+      description: "Template sensor showing % charged (must exist in HA)."
+      selector:
+        entity:
+          domain: sensor
+
+    time_remaining_sensor:
+      name: Time Remaining Sensor
+      description: "Template sensor showing time remaining (must exist in HA)."
+      selector:
+        entity:
+          domain: sensor
+
 trigger:
   - platform: time_pattern
     seconds: "/5"
@@ -40,12 +58,18 @@ trigger:
       entity_id: !input charge_timer
   - platform: state
     entity_id: !input charge_percentage
+
 condition: []
+
 action:
   - choose:
+
+      # 1) Charger turned ON → (re)start timer based on %
       - conditions:
           - condition: template
-            value_template: "{{ trigger.platform == 'state' and trigger.to_state.state == 'on' }}"
+            value_template: >
+              {{ trigger.platform == 'state'
+                 and trigger.to_state.state == 'on' }}
         sequence:
           - service: timer.cancel
             target:
@@ -57,55 +81,65 @@ action:
             data:
               duration: >
                 {% set pct = states(!input charge_percentage) | float(0) %}
-                {% set max_sec = 30600 %}  # 8 hours 30 minutes
-                {% set total_sec = (pct / 100 * max_sec) | int %}
-                {% set h = total_sec // 3600 %}
-                {% set m = (total_sec % 3600) // 60 %}
-                {% set s = total_sec % 60 %}
+                {% set max_sec = 30600 %}  # 8 h 30 m
+                {% set total = (pct / 100 * max_sec) | int %}
+                {% set h = total // 3600 %}
+                {% set m = (total % 3600) // 60 %}
+                {% set s = total % 60 %}
                 {{ "%02d:%02d:%02d" | format(h, m, s) }}
+
+      # 2) Timer finished → turn off charger
       - conditions:
           - condition: template
-            value_template: "{{ trigger.platform == 'event' and trigger.event.event_type == 'timer.finished' }}"
+            value_template: >
+              {{ trigger.platform == 'event'
+                 and trigger.event.event_type == 'timer.finished' }}
         sequence:
           - service: switch.turn_off
             target:
               entity_id: !input charger_switch
+
+      # 3) Charger turned OFF → cancel timer
       - conditions:
           - condition: template
-            value_template: "{{ trigger.platform == 'state' and trigger.to_state.state == 'off' }}"
+            value_template: >
+              {{ trigger.platform == 'state'
+                 and trigger.to_state.state == 'off' }}
         sequence:
           - service: timer.cancel
             target:
               entity_id: !input charge_timer
+
+      # 4) Charge % changed while charger is ON → restart timer
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.platform == 'state'
+                 and trigger.entity_id == !input charge_percentage
+                 and is_state(!input charger_switch, 'on') }}
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+          - delay: "00:00:01"
+          - service: timer.start
+            target:
+              entity_id: !input charge_timer
+            data:
+              duration: >
+                {% set pct = states(!input charge_percentage) | float(0) %}
+                {% set max_sec = 30600 %}
+                {% set total = (pct / 100 * max_sec) | int %}
+                {% set h = total // 3600 %}
+                {% set m = (total % 3600) // 60 %}
+                {% set s = total % 60 %}
+                {{ "%02d:%02d:%02d" | format(h, m, s) }}
+
+  # 5) Refresh both template sensors
   - service: homeassistant.update_entity
     target:
-      entity_id: sensor.ev_charge_progress_pct
-variables:
-  charge_progress: >
-    {% set finishes_at = state_attr(!input charge_timer, 'finishes_at') %}
-    {% set dur = state_attr(!input charge_timer, 'duration') | default('0:00:00') | as_timedelta %}
-    {% set total = dur.total_seconds() %}
-    {% if finishes_at and total > 0 %}
-      {% set rem = (as_datetime(finishes_at) - now()).total_seconds() %}
-      {% set pct = ((total - rem) / total * 100) | round(1) %}
-      {{ [0, [pct, 100] | min] | max }}
-    {% else %}
-      0
-    {% endif %}
-  time_remaining: >
-    {% if is_state(!input charger_switch, 'off') %}
-      00:00:00
-    {% else %}
-      {% set end = state_attr(!input charge_timer, 'finishes_at') %}
-      {% if end %}
-        {% set rem = (as_timestamp(end) - as_timestamp(now())) | int %}
-        {% if rem > 0 %}
-          {{ '%02d:%02d:%02d' | format(rem//3600, (rem%3600)//60, rem%60) }}
-        {% else %}
-          00:00:00
-        {% endif %}
-      {% else %}
-        00:00:00
-      {% endif %}
-    {% endif %}
+      entity_id:
+        - !input progress_sensor
+        - !input time_remaining_sensor
+
 mode: restart
