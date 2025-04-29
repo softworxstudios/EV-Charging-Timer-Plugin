@@ -1,0 +1,83 @@
+
+blueprint:
+  name: EV Charger Charging Automation
+  description: Manage EV Charger charging with progress tracking and timer control.
+  domain: automation
+  input:
+    charger_switch:
+      name: Charger Switch
+      description: The switch entity controlling the EV Charger charger.
+      selector:
+        entity:
+          domain: switch
+    charge_timer:
+      name: Charge Timer
+      description: The timer entity for the EV Charger charging process.
+      selector:
+        entity:
+          domain: timer
+    charge_percentage:
+      name: Charge Percentage Input
+      description: Input number entity for the desired charge percentage.
+      selector:
+        entity:
+          domain: input_number
+    max_duration:
+      name: Maximum Timer Duration
+      description: Maximum duration for the timer (default: 8 hours 30 minutes).
+      default: 08:30:00
+      selector:
+        text:
+          multiline: false
+trigger:
+  - platform: time_pattern
+    seconds: "/5"
+  - platform: state
+    entity_id: !input charger_switch
+  - platform: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input charge_timer
+  - platform: state
+    entity_id: !input charge_percentage
+condition: []
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.platform == 'state' and trigger.to_state.state == 'on' }}"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+          - delay: "00:00:01"
+          - service: timer.start
+            target:
+              entity_id: !input charge_timer
+            data:
+              duration: >
+                {% set pct = states(!input charge_percentage) | float(0) %}
+                {% set max_sec = 30600 %}  # 8 hours 30 minutes
+                {% set total_sec = (pct / 100 * max_sec) | int %}
+                {% set h = total_sec // 3600 %}
+                {% set m = (total_sec % 3600) // 60 %}
+                {% set s = total_sec % 60 %}
+                {{ "%02d:%02d:%02d" | format(h, m, s) }}
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.platform == 'event' and trigger.event.event_type == 'timer.finished' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input charger_switch
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.platform == 'state' and trigger.to_state.state == 'off' }}"
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input charge_timer
+  - service: homeassistant.update_entity
+    target:
+      entity_id: sensor.ev_charger_charge_progress_pct
+mode: restart
