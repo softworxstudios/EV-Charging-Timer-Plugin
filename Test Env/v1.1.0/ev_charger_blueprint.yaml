@@ -1,18 +1,18 @@
 
 blueprint:
-  name: EV Charger Charging Automation
-  description: Manage EV Charger charging with progress tracking and timer control.
+  name: EV Charger Automation
+  description: Manage EV charging with progress tracking and timer control, all configurable via the Home Assistant UI.
   domain: automation
   input:
     charger_switch:
       name: Charger Switch
-      description: The switch entity controlling the EV Charger charger.
+      description: The switch entity controlling the EV charger.
       selector:
         entity:
           domain: switch
     charge_timer:
       name: Charge Timer
-      description: The timer entity for the EV Charger charging process.
+      description: The timer entity for the EV charging process.
       selector:
         entity:
           domain: timer
@@ -79,5 +79,33 @@ action:
               entity_id: !input charge_timer
   - service: homeassistant.update_entity
     target:
-      entity_id: sensor.ev_charger_charge_progress_pct
+      entity_id: sensor.ev_charge_progress_pct
+variables:
+  charge_progress: >
+    {% set finishes_at = state_attr(!input charge_timer, 'finishes_at') %}
+    {% set dur = state_attr(!input charge_timer, 'duration') | default('0:00:00') | as_timedelta %}
+    {% set total = dur.total_seconds() %}
+    {% if finishes_at and total > 0 %}
+      {% set rem = (as_datetime(finishes_at) - now()).total_seconds() %}
+      {% set pct = ((total - rem) / total * 100) | round(1) %}
+      {{ [0, [pct, 100] | min] | max }}
+    {% else %}
+      0
+    {% endif %}
+  time_remaining: >
+    {% if is_state(!input charger_switch, 'off') %}
+      00:00:00
+    {% else %}
+      {% set end = state_attr(!input charge_timer, 'finishes_at') %}
+      {% if end %}
+        {% set rem = (as_timestamp(end) - as_timestamp(now())) | int %}
+        {% if rem > 0 %}
+          {{ '%02d:%02d:%02d' | format(rem//3600, (rem%3600)//60, rem%60) }}
+        {% else %}
+          00:00:00
+        {% endif %}
+      {% else %}
+        00:00:00
+      {% endif %}
+    {% endif %}
 mode: restart
