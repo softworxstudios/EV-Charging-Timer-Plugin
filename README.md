@@ -58,5 +58,3 @@ Turn the charger switch **ON**, set a percentage, and the blueprint will start t
 
 ---
 
-**Tip:**  
-Add your helpers and switch to a Lovelace dashboard for easy control and monitoring.
